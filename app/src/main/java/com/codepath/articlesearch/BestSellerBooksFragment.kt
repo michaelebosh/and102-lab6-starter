@@ -1,59 +1,117 @@
 package com.codepath.articlesearch
 
 import android.os.Bundle
-import androidx.fragment.app.Fragment
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.widget.ContentLoadingProgressBar
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.codepath.asynchttpclient.AsyncHttpClient
+import com.codepath.asynchttpclient.RequestParams
+import com.codepath.asynchttpclient.callback.JsonHttpResponseHandler
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.codepath.articlesearch.R.layout
+import okhttp3.Headers
+import org.json.JSONObject
 
-// TODO: Rename parameter arguments, choose names that match
-// the fragment initialization parameters, e.g. ARG_ITEM_NUMBER
-private const val ARG_PARAM1 = "param1"
-private const val ARG_PARAM2 = "param2"
-
-/**
- * A simple [Fragment] subclass.
- * Use the [BestSellerBooksFragment.newInstance] factory method to
- * create an instance of this fragment.
+// --------------------------------//
+// CHANGE THIS TO BE YOUR API KEY  //
+// --------------------------------//
+private const val API_KEY = "FIYBsAwBHYJrc9Nu06FkmQhgUt3eaVzz"
+/*
+ * The class for the only fragment in the app, which contains the progress bar,
+ * recyclerView, and performs the network calls to the NY Times API.
  */
-class BestSellerBooksFragment : Fragment() {
-    // TODO: Rename and change types of parameters
-    private var param1: String? = null
-    private var param2: String? = null
+class BestSellerBooksFragment : Fragment(), OnListFragmentInteractionListener {
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        arguments?.let {
-            param1 = it.getString(ARG_PARAM1)
-            param2 = it.getString(ARG_PARAM2)
-        }
-    }
-
+    /*
+     * Constructing the view
+     */
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        // Inflate the layout for this fragment
-        return inflater.inflate(R.layout.fragment_best_seller_books, container, false)
+        val view = inflater.inflate(layout.fragment_best_seller_books_list, container, false)
+        val progressBar = view.findViewById<View>(R.id.progress) as ContentLoadingProgressBar
+        val recyclerView = view.findViewById<View>(R.id.list) as RecyclerView
+        val context = view.context
+        recyclerView.layoutManager = GridLayoutManager(context, 2)
+        updateAdapter(progressBar, recyclerView)
+        return view
     }
 
-    companion object {
-        /**
-         * Use this factory method to create a new instance of
-         * this fragment using the provided parameters.
-         *
-         * @param param1 Parameter 1.
-         * @param param2 Parameter 2.
-         * @return A new instance of fragment BestSellerBooksFragment.
-         */
-        // TODO: Rename and change types and number of parameters
-        @JvmStatic
-        fun newInstance(param1: String, param2: String) =
-            BestSellerBooksFragment().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_PARAM1, param1)
-                    putString(ARG_PARAM2, param2)
-                }
-            }
+    /*
+     * Updates the RecyclerView adapter with new data.  This is where the
+     * networking magic happens!
+     */
+    private fun updateAdapter(progressBar: ContentLoadingProgressBar, recyclerView: RecyclerView) {
+        progressBar.show()
+
+        // Create and set up an AsyncHTTPClient() here
+        val client = AsyncHttpClient()
+        val params = RequestParams()
+        params["api-key"] = API_KEY
+
+        // Using the client, perform the HTTP request
+        client[
+                "https://api.nytimes.com/svc/books/v3/lists/current/hardcover-fiction.json",
+                params,
+                object : JsonHttpResponseHandler()
+                {
+                    /*
+                     * The onSuccess function gets called when
+                     * HTTP response status is "200 OK"
+                     */
+                    override fun onSuccess(
+                        statusCode: Int,
+                        headers: Headers,
+                        json: JSON
+                    ) {
+                        // The wait for a response is over
+                        progressBar.hide()
+
+                        val resultsJSON : JSONObject = json.jsonObject.get("results") as JSONObject
+                        val booksRawJSON : String = resultsJSON.get("books").toString()
+                        val gson = Gson()
+                        val arrayTutorialType = object : TypeToken<List<BestSellerBook>>() {}.type
+                        val models : List<BestSellerBook> = gson.fromJson(booksRawJSON, arrayTutorialType)
+                        recyclerView.adapter = BestSellerBooksRecyclerViewAdapter(models, this@BestSellerBooksFragment)
+
+                        // Look for this in Logcat:
+                        Log.d("BestSellerBooksFragment", "response successful")
+                    }
+
+                    /*
+                     * The onFailure function gets called when
+                     * HTTP response status is "4XX" (eg. 401, 403, 404)
+                     */
+                    override fun onFailure(
+                        statusCode: Int,
+                        headers: Headers?,
+                        errorResponse: String,
+                        t: Throwable?
+                    ) {
+                        // The wait for a response is over
+                        progressBar.hide()
+
+                        // If the error is not null, log it!
+                        t?.message?.let {
+                            Log.e("BestSellerBooksFragment", errorResponse)
+                        }
+                    }
+                }]
     }
+
+    /*
+     * What happens when a particular book is clicked.
+     */
+    override fun onItemClick(item: BestSellerBook) {
+        Toast.makeText(context, "test: " + item.title, Toast.LENGTH_LONG).show()
+    }
+
 }
